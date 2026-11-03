@@ -6,7 +6,7 @@
 
 An unofficial native Linux launcher for **Arizona RP**, **Rodina RP** and "Village Life". It downloads and updates the game from the same servers as the official launcher, shows servers, news and the mod catalog, and starts the game through Wine. The interface is Qt.
 
-![Game settings](docs/screenshot-ru.png)
+![Server list](docs/servers-ru.png)
 
 > **Note.** This project is not affiliated with Arizona Games. The game itself (`gta_sa.exe` with the project client) is Windows-only, so it runs through **Wine**. The launcher creates a separate Wine prefix and installs the components it needs.
 
@@ -28,6 +28,14 @@ An unofficial native Linux launcher for **Arizona RP**, **Rodina RP** and "Villa
   If the file is somewhere else, pick it in ⚙ → "Иконка из .exe...". The icon is not stored in this repository.
 
 Arizona V (GTA V / RAGE MP) and Trilogy are not supported.
+
+## Screenshots
+
+| Mod catalog | Game settings |
+|---|---|
+| ![Mod catalog](docs/mods-ru.png) | ![Game settings](docs/settings-ru.png) |
+
+In the screenshots, server icons and mod images are replaced with colored placeholders. The launcher itself loads them from the project servers.
 
 ## Requirements
 
