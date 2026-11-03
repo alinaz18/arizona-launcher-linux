@@ -22,6 +22,7 @@ An unofficial native Linux launcher for **Arizona RP**, **Rodina RP** and "Villa
 - The same launch options as the original: widescreen, auto-login, new textures, low-end PC, windowed,
   HDR, test branch and more. The memory limit can be set.
 - One-click Wine setup (like "Install drivers"): DXVK, DirectX 9, VC++ 2010/2013/2022, fonts.
+- Semi-transparent window background: ⚙ → "Прозрачность фона" (background transparency), 0–70%.
 - The launcher hides to the tray while you play. If the game crashes soon after start, it offers a file check.
 - Icon: if the official Arizona launcher is on the computer (the installer in Downloads or
   `Arizona Games Launcher.exe`), its original icon is used for the menu entry, dock and window.

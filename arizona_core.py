@@ -202,6 +202,7 @@ def default_config():
         "esync": True,
         "threads": 4,
         "minimize_on_play": True,
+        "opacity": 100,          # непрозрачность фона окна, %
         "fingerprint": "",
         "games": {},   # gameId -> {nick, memory, password, options, last_server, game_dir, mods}
     }

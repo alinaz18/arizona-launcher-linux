@@ -32,7 +32,7 @@ from PySide6.QtGui import (QAction, QColor, QDesktopServices, QFont, QIcon, QIma
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
     QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem,
-    QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton, QScrollArea, QSpinBox, QSplitter,
+    QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton, QScrollArea, QSlider, QSpinBox, QSplitter,
     QSystemTrayIcon, QTabWidget, QTableView, QTextBrowser, QToolButton, QVBoxLayout, QWidget,
 )
 from PySide6.QtCore import QRegularExpression
@@ -44,10 +44,12 @@ APP_NAME = "Arizona Launcher for Linux"
 POOL = ThreadPoolExecutor(max_workers=8)
 IMG_POOL = ThreadPoolExecutor(max_workers=6)
 
-STYLE = """
+STYLE_TEMPLATE = """
 QWidget { font-size: 10.5pt; }
-QMainWindow, QDialog { background: #15171c; }
-QWidget#central, QTabWidget::pane, QScrollArea, QScrollArea > QWidget > QWidget { background: #15171c; }
+QDialog { background: #15171c; }
+QMainWindow { background: transparent; }
+QWidget#central { background: @WINDOW@; }
+QTabWidget::pane, QScrollArea, QScrollArea > QWidget > QWidget { background: transparent; }
 QLabel { color: #e6e6e6; }
 QLabel[muted="true"] { color: #8b8f99; }
 QLabel#title { font-size: 15pt; font-weight: 700; }
@@ -71,13 +73,13 @@ QPushButton#play[cancel="true"] { background: #3a3f4b; color: #fff; }
 QProgressBar { background: #20232b; border: none; border-radius: 4px; height: 8px; text-align: center;
                color: transparent; }
 QProgressBar::chunk { background: #f0a020; border-radius: 4px; }
-QTableView, QListWidget, QTextBrowser { background: #1a1d23; color: #e6e6e6; border: 1px solid #262a33;
-               border-radius: 8px; alternate-background-color: #1d2027; gridline-color: transparent;
+QTableView, QListWidget, QTextBrowser { background: @PANEL@; color: #e6e6e6; border: 1px solid #262a33;
+               border-radius: 8px; alternate-background-color: @PANEL_ALT@; gridline-color: transparent;
                selection-background-color: #3a2f18; selection-color: #fff; }
-QHeaderView::section { background: #1a1d23; color: #8b8f99; border: none; padding: 6px; font-weight: 600; }
+QHeaderView::section { background: transparent; color: #8b8f99; border: none; padding: 6px; font-weight: 600; }
 QCheckBox { color: #e6e6e6; spacing: 8px; }
-QFrame#panel { background: #1a1d23; border: 1px solid #262a33; border-radius: 10px; }
-QFrame#bottom { background: #101216; border-top: 1px solid #262a33; }
+QFrame#panel { background: @PANEL@; border: 1px solid #262a33; border-radius: 10px; }
+QFrame#bottom { background: @BOTTOM@; border-top: 1px solid #262a33; }
 QMenu { background: #20232b; color: #eee; border: 1px solid #323743; }
 QMenu::item:selected { background: #3a2f18; }
 QScrollBar:vertical { background: transparent; width: 10px; }
@@ -158,6 +160,23 @@ def app_icon():
         if not icon.isNull():
             return icon
     return QIcon.fromTheme("applications-games")
+
+
+def build_style(opacity=100):
+    """Стили с прозрачностью фона: opacity — непрозрачность окна в процентах (30–100).
+    Панели и списки чуть плотнее фона, чтобы текст оставался читаемым."""
+    a = max(30, min(100, int(opacity))) / 100
+
+    def rgba(r, g, b, alpha):
+        return f"rgba({r}, {g}, {b}, {round(min(alpha, 1) * 255)})"
+    return (STYLE_TEMPLATE
+            .replace("@WINDOW@", rgba(21, 23, 28, a))
+            .replace("@PANEL_ALT@", rgba(29, 32, 39, a + 0.15))
+            .replace("@PANEL@", rgba(26, 29, 35, a + 0.15))
+            .replace("@BOTTOM@", rgba(16, 18, 22, a + 0.1)))
+
+
+STYLE = build_style()
 
 
 def human_size(n):
@@ -848,6 +867,23 @@ class LauncherSettings(QDialog):
         self.hide.setChecked(cfg.get("minimize_on_play", True))
         for w in (self.vsync, self.esync, self.hide):
             form.addRow("", w)
+        # прозрачность фона: 100 — непрозрачный, меньше — сквозь окно виден рабочий стол
+        row = QHBoxLayout()
+        self.opacity = QSlider(Qt.Horizontal)
+        self.opacity.setRange(30, 100)
+        self.opacity.setValue(int(cfg.get("opacity", 100)))
+        self.opacity_label = QLabel()
+        self.opacity_label.setMinimumWidth(48)
+        self._initial_opacity = self.opacity.value()
+
+        def preview(v):
+            self.opacity_label.setText(f"{100 - v}%")
+            QApplication.instance().setStyleSheet(build_style(v))
+        self.opacity.valueChanged.connect(preview)
+        self.opacity_label.setText(f"{100 - self.opacity.value()}%")
+        row.addWidget(self.opacity, 1)
+        row.addWidget(self.opacity_label)
+        form.addRow("Прозрачность фона:", row)
         lay.addLayout(form)
 
         tools = QHBoxLayout()
@@ -874,6 +910,10 @@ class LauncherSettings(QDialog):
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
 
+    def reject(self):
+        QApplication.instance().setStyleSheet(build_style(self._initial_opacity))   # отменить предпросмотр
+        super().reject()
+
     def apply(self):
         self.cfg["games_root"] = self.root.text().strip() or self.cfg["games_root"]
         self.cfg["wine"] = self.wine.text().strip() or "wine"
@@ -882,6 +922,7 @@ class LauncherSettings(QDialog):
         self.cfg["vsync"] = self.vsync.isChecked()
         self.cfg["esync"] = self.esync.isChecked()
         self.cfg["minimize_on_play"] = self.hide.isChecked()
+        self.cfg["opacity"] = self.opacity.value()
 
 
 # ---------------------------------------------------------------- главное окно
@@ -910,6 +951,8 @@ class MainWindow(QMainWindow):
         self.dl_done = 0
 
         self.setWindowTitle(APP_NAME)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        QApplication.instance().setStyleSheet(build_style(self.cfg.get("opacity", 100)))
         self.setWindowIcon(app_icon())
         self.resize(1200, 760)
         self._build()
