@@ -203,6 +203,7 @@ def default_config():
         "threads": 4,
         "minimize_on_play": True,
         "opacity": 100,          # непрозрачность фона окна, %
+        "blur": 0,               # размытие фона в KDE (0 — выкл., 1–15 — сила)
         "fingerprint": "",
         "games": {},   # gameId -> {nick, memory, password, options, last_server, game_dir, mods}
     }

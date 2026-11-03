@@ -26,8 +26,9 @@ except ImportError:
         subprocess.run(["kdialog", "--error", _msg])
     sys.exit(1)
 
-from PySide6.QtCore import QObject, QPointF, QRectF, QSize, QSortFilterProxyModel, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import (QAction, QColor, QDesktopServices, QFont, QIcon, QImage, QPainter, QPainterPath, QPen,
+from PySide6.QtCore import (QObject, QPointF, QProcess, QRectF, QSize, QSortFilterProxyModel, Qt, QTimer, QUrl,
+                            Signal)
+from PySide6.QtGui import (QAction, QColor, QDesktopServices, QFont, QGuiApplication, QIcon, QImage, QPainter, QPainterPath, QPen,
                            QPixmap, QRegularExpressionValidator, QStandardItem, QStandardItemModel)
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFormLayout,
@@ -177,6 +178,95 @@ def build_style(opacity=100):
 
 
 STYLE = build_style()
+
+
+# ---------------------------------------------------------------- размытие фона (KDE Plasma)
+# На Wayland программа просит размытие через протокол KDE, недоступный из PySide.
+# Поэтому при включённом размытии окно работает через XWayland и выставляет X11-свойство
+# _KDE_NET_WM_BLUR_BEHIND_REGION — KWin размывает всё, что под окном.
+# Силу размытия задаёт KWin, она общая для всех окон (Параметры системы → Эффекты → Размытие).
+
+BLUR_MAX = 15
+
+
+def kde_session():
+    return "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+
+
+def blur_available():
+    return kde_session() and bool(os.environ.get("DISPLAY")) and bool(shutil.which("dbus-send"))
+
+
+def _kwin(path, method, *args):
+    cmd = ["dbus-send", "--session", "--print-reply", "--dest=org.kde.KWin", path, method, *args]
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def kwin_blur_loaded():
+    return '"blur"' in _kwin("/Effects", "org.freedesktop.DBus.Properties.Get",
+                             "string:org.kde.kwin.Effects", "string:loadedEffects")
+
+
+def kwin_enable_blur():
+    if shutil.which("kwriteconfig6"):
+        subprocess.run(["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins", "--key", "blurEnabled", "true"])
+    _kwin("/Effects", "org.kde.kwin.Effects.loadEffect", "string:blur")
+    return kwin_blur_loaded()
+
+
+def kwin_blur_strength():
+    try:
+        out = subprocess.run(["kreadconfig6", "--file", "kwinrc", "--group", "Effect-blur", "--key", "BlurStrength"],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+        return int(out) if out else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def kwin_set_blur_strength(v):
+    if not shutil.which("kwriteconfig6"):
+        return
+    key = ["kwriteconfig6", "--file", "kwinrc", "--group", "Effect-blur", "--key", "BlurStrength"]
+    subprocess.run(key + (["--delete"] if v is None else [str(int(v))]))
+    _kwin("/Effects", "org.kde.kwin.Effects.reconfigureEffect", "string:blur")
+
+
+def set_x11_blur(win_id, on):
+    """Попросить KWin размыть фон под X11-окном (вся площадь окна)."""
+    import ctypes
+    import ctypes.util
+    lib = ctypes.util.find_library("X11")
+    if not lib:
+        return False
+    x = ctypes.cdll.LoadLibrary(lib)
+    x.XOpenDisplay.restype = ctypes.c_void_p
+    x.XOpenDisplay.argtypes = [ctypes.c_char_p]
+    x.XInternAtom.restype = ctypes.c_ulong
+    x.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+    x.XChangeProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
+                                  ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+    x.XDeleteProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong]
+    x.XFlush.argtypes = [ctypes.c_void_p]
+    x.XCloseDisplay.argtypes = [ctypes.c_void_p]
+    dpy = x.XOpenDisplay(None)
+    if not dpy:
+        return False
+    atom = x.XInternAtom(dpy, b"_KDE_NET_WM_BLUR_BEHIND_REGION", 0)
+    if on:   # пустой список прямоугольников = размыть всё окно; 6 = XA_CARDINAL, 0 = PropModeReplace
+        x.XChangeProperty(dpy, win_id, atom, 6, 32, 0, None, 0)
+    else:
+        x.XDeleteProperty(dpy, win_id, atom)
+    x.XFlush(dpy)
+    x.XCloseDisplay(dpy)
+    return True
+
+
+def restart_launcher():
+    QProcess.startDetached(sys.executable, [str(Path(sys.argv[0]).absolute()), *sys.argv[1:]])
+    QApplication.quit()
 
 
 def human_size(n):
@@ -884,6 +974,34 @@ class LauncherSettings(QDialog):
         row.addWidget(self.opacity, 1)
         row.addWidget(self.opacity_label)
         form.addRow("Прозрачность фона:", row)
+
+        brow = QHBoxLayout()
+        self.blur = QSlider(Qt.Horizontal)
+        self.blur.setRange(0, BLUR_MAX)
+        self.blur.setValue(int(cfg.get("blur", 0)))
+        self.blur_label = QLabel()
+        self.blur_label.setMinimumWidth(48)
+        self._initial_blur = self.blur.value()
+        self._initial_strength = kwin_blur_strength()
+        live = QGuiApplication.platformName() == "xcb" and self._initial_blur > 0
+
+        def blur_preview(v):
+            self.blur_label.setText(str(v) if v else "выкл.")
+            if live:   # окно уже умеет размытие — меняем силу сразу
+                if v:
+                    kwin_set_blur_strength(v)
+                set_x11_blur(int(parent.winId()), v > 0)
+        self.blur.valueChanged.connect(blur_preview)
+        self.blur_label.setText(str(self.blur.value()) if self.blur.value() else "выкл.")
+        brow.addWidget(self.blur, 1)
+        brow.addWidget(self.blur_label)
+        form.addRow("Размытие фона:", brow)
+        if blur_available():
+            form.addRow("", muted("Работает вместе с прозрачностью. Сила размытия общая для KDE "
+                                  "(как у панели Plasma). Первое включение перезапустит лаунчер."))
+        else:
+            self.blur.setEnabled(False)
+            form.addRow("", muted("Размытие доступно только в KDE Plasma."))
         lay.addLayout(form)
 
         tools = QHBoxLayout()
@@ -912,6 +1030,9 @@ class LauncherSettings(QDialog):
 
     def reject(self):
         QApplication.instance().setStyleSheet(build_style(self._initial_opacity))   # отменить предпросмотр
+        if self.blur.value() != self._initial_blur and QGuiApplication.platformName() == "xcb":
+            kwin_set_blur_strength(self._initial_strength)
+            set_x11_blur(int(self.parent().winId()), self._initial_blur > 0)
         super().reject()
 
     def apply(self):
@@ -923,6 +1044,7 @@ class LauncherSettings(QDialog):
         self.cfg["esync"] = self.esync.isChecked()
         self.cfg["minimize_on_play"] = self.hide.isChecked()
         self.cfg["opacity"] = self.opacity.value()
+        self.cfg["blur"] = self.blur.value()
 
 
 # ---------------------------------------------------------------- главное окно
@@ -1551,6 +1673,32 @@ class MainWindow(QMainWindow):
             self.update_btn.clicked.connect(lambda: open_url(url))
             self.update_btn.show()
 
+    def showEvent(self, e):
+        super().showEvent(e)
+        if self.cfg.get("blur") and QGuiApplication.platformName() == "xcb" and blur_available():
+            set_x11_blur(int(self.winId()), True)
+
+    def apply_blur_setting(self, old):
+        """После сохранения настроек: включить/выключить размытие, при необходимости перезапуститься."""
+        new = self.cfg.get("blur", 0)
+        if new == old or not blur_available():
+            return
+        if new and not kwin_blur_loaded():
+            r = QMessageBox.question(self, APP_NAME, "В KDE выключен эффект «Размытие», без него фон не размоется.\n\n"
+                                                     "Включить его? (Параметры системы → Эффекты рабочего стола)")
+            if r != QMessageBox.Yes or not kwin_enable_blur():
+                return
+        if new:
+            kwin_set_blur_strength(new)
+        if QGuiApplication.platformName() == "xcb":
+            set_x11_blur(int(self.winId()), bool(new))
+        elif new:
+            r = QMessageBox.question(self, APP_NAME, "Чтобы включить размытие, лаунчер нужно перезапустить. "
+                                                     "Перезапустить сейчас?")
+            if r == QMessageBox.Yes:
+                core.save_config(self.cfg)
+                restart_launcher()
+
     def _apply_icon(self):
         icon = app_icon()
         self.setWindowIcon(icon)
@@ -1576,8 +1724,10 @@ class MainWindow(QMainWindow):
         dlg = LauncherSettings(self.cfg, self, self.run_setup)
         if dlg.exec() == QDialog.Accepted:
             old_root = self.cfg["games_root"]
+            old_blur = self.cfg.get("blur", 0)
             dlg.apply()
             core.save_config(self.cfg)
+            self.apply_blur_setting(old_blur)
             if old_root != self.cfg["games_root"]:
                 self.game_tab.build(self.cfg, self.game)
                 self.start_check()
@@ -1592,6 +1742,10 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    cfg = core.load_config()
+    if (cfg.get("blur") and blur_available() and os.environ.get("WAYLAND_DISPLAY")
+            and "QT_QPA_PLATFORM" not in os.environ):
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
     app = QApplication(sys.argv)
     app.setApplicationName("arizona-launcher")
     app.setDesktopFileName("arizona-launcher")
