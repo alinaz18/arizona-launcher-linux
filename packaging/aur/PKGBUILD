@@ -1,6 +1,6 @@
 # Maintainer: bagira818 <https://github.com/alinaz18>
 pkgname=arizona-launcher-linux
-pkgver=@VERSION@
+pkgver=1.1
 pkgrel=1
 pkgdesc="Unofficial native Arizona RP / Rodina RP launcher for Linux (Qt); runs the game via Wine"
 arch=('any')
@@ -12,7 +12,7 @@ optdepends=('winetricks: one-click Wine components (DXVK, VC++, fonts)'
 provides=('arizona-launcher')
 conflicts=('arizona-launcher')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+sha256sums=('637d5d4ac3d8d382ef9ff0b9231e8622bd1c43b8b97a741267eaee11ba39167b')
 
 package() {
   cd "$pkgname-$pkgver"
