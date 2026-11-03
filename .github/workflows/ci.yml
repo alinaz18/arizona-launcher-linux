@@ -1,0 +1,42 @@
+name: Test install.sh
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  install:
+    name: install.sh on ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:12", "debian:13", "ubuntu:24.04", "ubuntu:26.04", "fedora:latest", "archlinux:latest"]
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Install git
+        run: |
+          if command -v apt-get >/dev/null; then apt-get update && apt-get install -y git ca-certificates
+          elif command -v dnf >/dev/null; then dnf install -y git
+          elif command -v pacman >/dev/null; then pacman -Syu --noconfirm git
+          fi
+      - uses: actions/checkout@v4
+      - name: Run installer
+        run: ./install.sh
+      - name: Check installed files
+        run: |
+          test -x "$HOME/.local/bin/arizona-launcher"
+          test -f "$HOME/.local/share/applications/arizona-launcher.desktop"
+          command -v wine
+      - name: Start the launcher (must keep running until timeout)
+        run: |
+          set +e
+          timeout 10 "$HOME/.local/bin/arizona-launcher"
+          code=$?
+          echo "exit code: $code"
+          test "$code" = 124

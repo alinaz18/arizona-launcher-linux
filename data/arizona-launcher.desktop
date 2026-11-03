@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Arizona Launcher
+GenericName=Game launcher
+Comment=Unofficial Arizona RP / Rodina RP launcher for Linux
+Comment[ru]=Неофициальный лаунчер Arizona RP / Rodina RP для Linux
+Exec=@BIN@
+Icon=arizona-launcher
+Terminal=false
+Categories=Game;
+Keywords=arizona;rodina;samp;gta;san andreas;
+StartupWMClass=arizona-launcher
