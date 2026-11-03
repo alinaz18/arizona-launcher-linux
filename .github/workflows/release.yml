@@ -1,0 +1,75 @@
+name: Build packages for release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.1)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    container: debian:13
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - run: apt-get update && apt-get install -y git ca-certificates dpkg-dev
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build .deb
+        run: packaging/build-deb.sh "${TAG#v}"
+      - name: Test install of the .deb
+        run: |
+          apt-get install -y ./dist/*.deb
+          set +e; timeout 10 arizona-launcher; code=$?; set -e
+          echo "exit code: $code"; test "$code" = 124
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+
+  rpm:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - run: dnf install -y git rpm-build tar gzip
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build .rpm
+        run: packaging/build-rpm.sh "${TAG#v}"
+      - name: Test install of the .rpm
+        run: |
+          dnf install -y ./dist/*.rpm
+          set +e; timeout 10 arizona-launcher; code=$?; set -e
+          echo "exit code: $code"; test "$code" = 124
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm
+          path: dist/*.rpm
+
+  upload:
+    needs: [deb, rpm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Attach packages to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"

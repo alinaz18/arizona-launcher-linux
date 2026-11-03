@@ -1,6 +1,6 @@
 # Arizona Launcher for Linux
 
-[![Checks](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/ci.yml/badge.svg)](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/alinaz18/arizona-launcher-linux)](LICENSE)
+[![Checks](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/ci.yml/badge.svg)](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/ci.yml) [![Watchdog](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/watchdog.yml/badge.svg)](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/watchdog.yml) [![Release](https://img.shields.io/github/v/release/alinaz18/arizona-launcher-linux)](https://github.com/alinaz18/arizona-launcher-linux/releases/latest) [![License: MIT](https://img.shields.io/github/license/alinaz18/arizona-launcher-linux)](LICENSE)
 
 [Русский](README.md) | **English**
 
@@ -46,6 +46,22 @@ In the screenshots, server icons and mod images are replaced with colored placeh
 `install.sh` installs all of this.
 
 ## Installation
+
+### Packages
+
+The [Releases](https://github.com/alinaz18/arizona-launcher-linux/releases/latest) page has ready-made packages:
+
+- **Debian 13+, Ubuntu 26.04+:** `arizona-launcher_*_all.deb`, install with `sudo apt install ./arizona-launcher_*_all.deb`
+- **Fedora:** `arizona-launcher-*.noarch.rpm`, install with `sudo dnf install ./arizona-launcher-*.noarch.rpm`
+- **Arch, CachyOS, Manjaro:** build the package from this repository:
+  ```bash
+  git clone https://github.com/alinaz18/arizona-launcher-linux.git
+  cd arizona-launcher-linux/packaging/aur && makepkg -si
+  ```
+
+For Debian 12, Ubuntu 22.04/24.04, Mint and openSUSE use the installer below.
+
+### Installer (any distribution)
 
 ```sh
 git clone https://github.com/alinaz18/arizona-launcher-linux.git
@@ -94,6 +110,18 @@ The interface is in Russian, like the game itself.
 ```
 
 Downloaded game files are never removed. Delete `~/Games/arizona-launcher` by hand if you want.
+
+## When Arizona changes something on their servers
+
+Game updates are downloaded automatically, just like in the official launcher. Only changes
+under the hood can break it: new domains, a different response format or new launch flags. For that:
+
+- on every start the launcher loads [`remote.json`](remote.json) from this repository (server addresses,
+  User-Agent, extra launch arguments). Small changes are fixed by editing that file, and every
+  launcher picks them up without reinstalling;
+- the [watchdog](.github/workflows/watchdog.yml) checks the Arizona servers and the official launcher
+  version every day and opens an issue when something changes;
+- when a new launcher version is required, a green "Обновление лаунчера" (launcher update) button appears in the window.
 
 ## How it works
 

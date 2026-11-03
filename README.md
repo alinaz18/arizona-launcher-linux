@@ -1,6 +1,6 @@
 # Arizona Launcher для Linux
 
-[![Checks](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/ci.yml/badge.svg)](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/alinaz18/arizona-launcher-linux)](LICENSE)
+[![Checks](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/ci.yml/badge.svg)](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/ci.yml) [![Watchdog](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/watchdog.yml/badge.svg)](https://github.com/alinaz18/arizona-launcher-linux/actions/workflows/watchdog.yml) [![Release](https://img.shields.io/github/v/release/alinaz18/arizona-launcher-linux)](https://github.com/alinaz18/arizona-launcher-linux/releases/latest) [![License: MIT](https://img.shields.io/github/license/alinaz18/arizona-launcher-linux)](LICENSE)
 
 **Русский** | [English](README.en.md)
 
@@ -47,6 +47,22 @@ Arizona V (GTA V / RAGE MP) и Trilogy не поддерживаются.
 
 ## Установка
 
+### Готовые пакеты
+
+На странице [Releases](https://github.com/alinaz18/arizona-launcher-linux/releases/latest) лежат пакеты:
+
+- **Debian 13+, Ubuntu 26.04+:** `arizona-launcher_*_all.deb`, установка: `sudo apt install ./arizona-launcher_*_all.deb`
+- **Fedora:** `arizona-launcher-*.noarch.rpm`, установка: `sudo dnf install ./arizona-launcher-*.noarch.rpm`
+- **Arch, CachyOS, Manjaro:** пакет собирается из репозитория:
+  ```bash
+  git clone https://github.com/alinaz18/arizona-launcher-linux.git
+  cd arizona-launcher-linux/packaging/aur && makepkg -si
+  ```
+
+Для Debian 12, Ubuntu 22.04/24.04, Mint и openSUSE используйте установщик ниже.
+
+### Установщик (любой дистрибутив)
+
 ```sh
 git clone https://github.com/alinaz18/arizona-launcher-linux.git
 cd arizona-launcher-linux
@@ -92,6 +108,18 @@ cd arizona-launcher-linux
 ```
 
 Скачанные файлы игры не удаляются никогда. Папку `~/Games/arizona-launcher` можно удалить вручную.
+
+## Если на серверах Arizona что-то изменится
+
+Обновления самой игры лаунчер скачивает сам, как официальный. Сломать его могут только
+изменения «под капотом»: новые домены, другой формат ответов или новые флаги запуска. На этот случай:
+
+- лаунчер при каждом старте загружает [`remote.json`](remote.json) из этого репозитория (адреса серверов,
+  User-Agent, дополнительные аргументы запуска). Мелкие изменения чинятся правкой этого файла,
+  и у всех пользователей всё заработает без переустановки;
+- [сторож](.github/workflows/watchdog.yml) каждый день проверяет серверы Arizona и версию официального
+  лаунчера и открывает issue, если что-то изменилось;
+- если нужна новая версия лаунчера, в окне появится зелёная кнопка «Обновление лаунчера».
 
 ## Как это устроено
 

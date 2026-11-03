@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "_comment": "Read by every launcher at startup. Change domains/flags here when Arizona changes them.",
+  "official_version": "0.0.144",
+  "min_launcher_version": "",
+  "notice": "",
+  "user_agent": "Arizona PC/0.0.144",
+  "api": [
+    "https://api.arizona-five.com/",
+    "https://arz-api-reserve.s-amp.com/"
+  ],
+  "mods_api": [
+    "https://api-samp.arizona-five.com/launcher/mods",
+    "https://arz-api-samp-reserve.s-amp.com/launcher/mods"
+  ],
+  "ping_groups": [
+    [
+      "https://cdn.azresources.cloud",
+      "https://resources.azgames-cdn.ru"
+    ],
+    [
+      "https://cdn.azsounds.net",
+      "https://azgamesound-cdn.ru"
+    ],
+    [
+      "https://server-api.arizona.games",
+      "https://server-api.azgames-cdn.ru"
+    ]
+  ],
+  "games": {
+    "arizona": {
+      "cdn": {
+        "main": "https://pc.az-ins.com/release",
+        "reserve": "https://arz-pc.react-group.tech/release",
+        "mods": "https://pc.az-ins.com/resource/mods",
+        "modsReserve": "https://arz-pc.react-group.tech/resource/mods"
+      },
+      "extra_args": []
+    },
+    "rodina": {
+      "cdn": {
+        "main": "https://pc.rod-ins.com/release",
+        "reserve": "https://rod-pc.react-group.tech/release",
+        "mods": "https://pc.rod-ins.com/resource/mods",
+        "modsReserve": "https://rod-pc.react-group.tech/resource/mods"
+      },
+      "extra_args": []
+    },
+    "village": {
+      "cdn": {
+        "main": "https://pc.az-ins.com/village",
+        "reserve": "https://arz-pc.react-group.tech/village",
+        "mods": "https://pc.az-ins.com/village/mods",
+        "modsReserve": "https://arz-pc.react-group.tech/village/mods"
+      },
+      "extra_args": []
+    }
+  }
+}

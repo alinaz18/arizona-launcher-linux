@@ -21,7 +21,8 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-APP_VERSION = "1.0"
+APP_VERSION = "1.1"
+REPO = "alinaz18/arizona-launcher-linux"
 # официальный лаунчер представляется так; CDN отдаёт файлы и без этого, но так надёжнее
 USER_AGENT = "Arizona PC/0.0.144"
 
@@ -111,6 +112,84 @@ GTA_EXES = ["enb.exe", "gta-sa.exe", "gtasa.exe", "gta_sa.exe"]  # приори�
 KEEP_ON_REPAIR = ("cef/Cache", "AZVoice/sound_storage", "AZVoice/config.json", "moonloader/config",
                   "moonloader/resources", "mods/mods.img")
 KEEP_EXACT = ("AZVoice",)
+
+
+# ---------------------------------------------------------------- удалённые настройки
+
+# Если Arizona сменит домены, API или потребует новые флаги запуска, это правится в
+# remote.json в репозитории — лаунчеры у всех подхватят изменения без переустановки.
+REMOTE_URL = f"https://raw.githubusercontent.com/{REPO}/main/remote.json"
+REMOTE_CACHE = DATA_DIR / "remote.json"
+REMOTE = {"notice": "", "official_version": "", "extra_args": {}}
+
+
+def _https_list(v):
+    return isinstance(v, list) and v and all(isinstance(x, str) and x.startswith("https://") for x in v)
+
+
+def apply_remote(data):
+    """Применить удалённые настройки. Всё непонятное молча пропускается."""
+    global USER_AGENT, API, MODS_API, PING_GROUPS
+    if not isinstance(data, dict) or data.get("schema") != 1:
+        return False
+    ua = data.get("user_agent")
+    if isinstance(ua, str) and 0 < len(ua) < 100:
+        USER_AGENT = ua
+    if _https_list(data.get("api")):
+        API = data["api"]
+    if _https_list(data.get("mods_api")):
+        MODS_API = data["mods_api"]
+    ping = data.get("ping_groups")
+    if isinstance(ping, list) and len(ping) == 3 and all(_https_list(g) for g in ping):
+        PING_GROUPS = ping
+    for gid, g in (data.get("games") or {}).items():
+        if gid not in GAMES or not isinstance(g, dict):
+            continue
+        cdn = g.get("cdn") or {}
+        for k in ("main", "reserve", "mods", "modsReserve"):
+            if isinstance(cdn.get(k), str) and cdn[k].startswith("https://"):
+                GAMES[gid]["cdn"][k] = cdn[k].rstrip("/")
+        extra = g.get("extra_args")
+        if isinstance(extra, list) and all(isinstance(a, str) and a.startswith("-") and " " not in a
+                                           for a in extra):
+            REMOTE["extra_args"][gid] = extra
+    REMOTE["notice"] = data.get("notice") if isinstance(data.get("notice"), str) else ""
+    REMOTE["official_version"] = str(data.get("official_version") or "")
+    REMOTE["min_version"] = str(data.get("min_launcher_version") or "")
+    return True
+
+
+def load_remote_cached():
+    try:
+        return apply_remote(json.loads(REMOTE_CACHE.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return False
+
+
+def refresh_remote():
+    """Скачать свежий remote.json из репозитория и применить (в фоне при старте)."""
+    try:
+        data = json.loads(http_get(REMOTE_URL, timeout=8))
+    except Exception:  # noqa: BLE001
+        return False
+    if not apply_remote(data):
+        return False
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    REMOTE_CACHE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return True
+
+
+def version_tuple(v):
+    return tuple(int(x) for x in "".join(c for c in v if c.isdigit() or c == ".").split(".") if x)
+
+
+def latest_release():
+    """(версия, ссылка) последнего релиза лаунчера на GitHub или None."""
+    try:
+        d = json.loads(http_get(f"https://api.github.com/repos/{REPO}/releases/latest", timeout=8))
+        return d["tag_name"].lstrip("v"), d["html_url"]
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def default_config():
@@ -962,6 +1041,7 @@ def build_args(cfg, game, server, cdn_idx):
     if o.get("testBranch") and gs.get("password"):
         args += ["-z", gs["password"]]
     args.append(GAMES[game]["flag"])
+    args += REMOTE["extra_args"].get(game, [])
     args += ["-userId", cfg["fingerprint"]]
     for m in gs["mods"].values():
         if m.get("flag"):

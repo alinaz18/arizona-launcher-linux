@@ -197,6 +197,8 @@ class Bridge(QObject):
     mod_progress = Signal(str)
     game_exit = Signal()
     icon_ready = Signal()
+    remote = Signal()
+    release = Signal(object)
 
 
 class Images:
@@ -891,6 +893,7 @@ class State:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        core.load_remote_cached()
         self.cfg = core.load_config()
         if self.cfg.get("game") not in GAMES:
             self.cfg["game"] = "arizona"
@@ -916,6 +919,8 @@ class MainWindow(QMainWindow):
         POOL.submit(self._bg_projects)
         POOL.submit(lambda: self.bridge.cdn.emit(core.cdn_indexes()))
         POOL.submit(lambda: install_original_icon(self.cfg) and self.bridge.icon_ready.emit())
+        POOL.submit(lambda: core.refresh_remote() and self.bridge.remote.emit())
+        POOL.submit(lambda: self.bridge.release.emit(core.latest_release()))
 
     # ---- интерфейс
     def _build(self):
@@ -942,6 +947,10 @@ class MainWindow(QMainWindow):
         self.nick.setValidator(QRegularExpressionValidator(QRegularExpression(r"[A-Za-z0-9_]{0,20}")))
         self.nick.setFixedWidth(220)
         top.addWidget(self.nick)
+        self.update_btn = QPushButton()
+        self.update_btn.setStyleSheet("background:#2f6f3e; border-color:#3d8a50;")
+        self.update_btn.hide()
+        top.addWidget(self.update_btn)
         self.settings_btn = QToolButton(text="⚙")
         self.settings_btn.setToolTip("Настройки лаунчера")
         top.addWidget(self.settings_btn)
@@ -1017,6 +1026,8 @@ class MainWindow(QMainWindow):
         b.mod_progress.connect(lambda t: (self.mods_tab.status.setText(t), self.mods_tab.status.show()))
         b.game_exit.connect(self._on_game_exit)
         b.icon_ready.connect(self._apply_icon)
+        b.remote.connect(self._on_remote)
+        b.release.connect(self._on_release)
         b.log.connect(lambda s: print(s, file=sys.stderr))
         self.game_box.currentIndexChanged.connect(lambda _: self._game_changed())
         self.nick.editingFinished.connect(self._save_nick)
@@ -1475,6 +1486,27 @@ class MainWindow(QMainWindow):
         self.mods_tab.status.hide()
         if err:
             QMessageBox.warning(self, APP_NAME, err)
+
+    def _on_remote(self):
+        notice = core.REMOTE.get("notice")
+        if notice:
+            self.detail.setText(notice)
+        mv = core.REMOTE.get("min_version")
+        if mv and core.version_tuple(core.APP_VERSION) < core.version_tuple(mv):
+            QMessageBox.warning(self, APP_NAME, f"Эта версия лаунчера ({core.APP_VERSION}) больше не работает "
+                                                f"с серверами проекта. Обновите лаунчер до {mv} или новее.")
+            open_url(f"https://github.com/{core.REPO}/releases/latest")
+
+    def _on_release(self, rel):
+        if not rel:
+            return
+        ver, url = rel
+        if core.version_tuple(ver) > core.version_tuple(core.APP_VERSION):
+            self.update_btn.setText(f"Обновление лаунчера {ver}")
+            self.update_btn.setToolTip("Открыть страницу релиза. Обновить: git pull и ./install.sh "
+                                       "или установить новый пакет.")
+            self.update_btn.clicked.connect(lambda: open_url(url))
+            self.update_btn.show()
 
     def _apply_icon(self):
         icon = app_icon()
